@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  rpg-bot:
+    build: .
+    container_name: mestre-arcano-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
