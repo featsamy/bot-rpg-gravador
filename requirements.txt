@@ -1,0 +1,4 @@
+py-cord[voice]
+requests
+python-dotenv
+pynacl
