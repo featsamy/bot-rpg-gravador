@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Instala o programa que lida com áudio (FFmpeg)
+# Instala FFmpeg, dependências de compilação E O GIT
 RUN apt-get update && \
-    apt-get install -y ffmpeg libffi-dev libnacl-dev python3-dev build-essential && \
+    apt-get install -y ffmpeg libffi-dev libnacl-dev python3-dev build-essential git && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
