@@ -1,19 +1,36 @@
 import discord
 import os
 import requests
+import boto3
 from discord.ext import commands
 
+# CONFIGURAÇÕES
 TOKEN = os.getenv("DISCORD_TOKEN")
-N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL") 
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
+
+# Configurações do Cloudflare R2
+R2_ENDPOINT = os.getenv("R2_ENDPOINT")
+R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
+R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
 
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Conexão com o Cloudflare R2
+s3_client = boto3.client(
+    's3',
+    endpoint_url=R2_ENDPOINT,
+    aws_access_key_id=R2_ACCESS_KEY,
+    aws_secret_access_key=R2_SECRET_KEY
+)
+
 @bot.event
 async def on_ready():
-    print(f"✅ Bot online e atualizado: {bot.user}")
+    print(f"✅ Bot SaaS Online: {bot.user}")
 
 @bot.command()
 async def gravar(ctx):
@@ -21,29 +38,19 @@ async def gravar(ctx):
     if not voice:
         return await ctx.send("❌ Entre em um canal de voz primeiro!")
 
-    # Lógica de conexão blindada
     if ctx.voice_client:
-        if ctx.voice_client.channel != voice.channel:
-            await ctx.voice_client.move_to(voice.channel)
         vc = ctx.voice_client
     else:
-        try:
-            vc = await voice.channel.connect()
-        except Exception as e:
-            # Se der erro, tenta desconectar e conectar de novo (Reset forçado)
-            print(f"Erro ao conectar: {e}. Tentando reset...")
-            if ctx.guild.voice_client:
-                await ctx.guild.voice_client.disconnect(force=True)
-            vc = await voice.channel.connect()
+        vc = await voice.channel.connect()
 
-    # Só começa a gravar se não estiver gravando
     if not vc.recording:
+        # Grava em MP3
         vc.start_recording(
             discord.sinks.MP3Sink(),
             finished_callback,
             ctx.channel,
         )
-        await ctx.send(f"🔴 **Gravando!** (Versão Atualizada) no canal `{voice.channel.name}`.")
+        await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
     else:
         await ctx.send("Já estou gravando!")
 
@@ -52,30 +59,44 @@ async def parar(ctx):
     vc = ctx.voice_client
     if vc and vc.recording:
         vc.stop_recording()
-        await ctx.send("🛑 Parei! Processando áudio...")
-        # Não desconectamos automaticamente para evitar o bug de reconexão
-        # Se quiser sair, use !sair
+        await ctx.send("🛑 Gravando finalizada! Subindo arquivos para a nuvem...")
     else:
-        await ctx.send("Eu não estou gravando nada.")
+        await ctx.send("Não estou gravando nada.")
 
 @bot.command()
 async def sair(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("👋 Saindo do canal.")
 
 async def finished_callback(sink, channel: discord.TextChannel, *args):
-    recorded_users = [f"<@{user_id}>" for user_id, audio in sink.audio_data.items()]
-    await channel.send(f"🎙️ Enviando áudio de: {', '.join(recorded_users)}.")
+    # Aqui a mágica acontece
+    await channel.send("☁️ Uploading para o servidor seguro...")
 
     for user_id, audio in sink.audio_data.items():
-        files = {
-            'file': (f'audio_{user_id}.mp3', audio.file, 'audio/mpeg')
-        }
-        data = {'user_id': user_id}
+        file_name = f"sessao_{channel.guild.id}_{user_id}.mp3"
+        
         try:
-            requests.post(N8N_WEBHOOK_URL, files=files, data=data)
+            # 1. Faz Upload para o Cloudflare R2
+            audio.file.seek(0)
+            s3_client.upload_fileobj(audio.file, R2_BUCKET_NAME, file_name)
+            
+            # 2. Gera o Link Público
+            file_url = f"{R2_PUBLIC_URL}/{file_name}"
+            
+            # 3. Envia SÓ O LINK para o n8n (JSON leve)
+            payload = {
+                'user_id': str(user_id),
+                'audio_url': file_url,
+                'server_name': str(channel.guild.name)
+            }
+            
+            requests.post(N8N_WEBHOOK_URL, json=payload)
+            print(f"Link enviado para n8n: {file_url}")
+
         except Exception as e:
-            print(f"Erro webhook: {e}")
+            print(f"Erro no upload: {e}")
+            await channel.send(f"⚠️ Erro ao processar áudio de <@{user_id}>.")
+
+    await channel.send("✅ Sessão segura na nuvem e enviada para a IA!")
 
 bot.run(TOKEN)
