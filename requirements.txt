@@ -2,3 +2,4 @@ git+https://github.com/Pycord-Development/pycord
 requests
 python-dotenv
 pynacl
+boto3
