@@ -4,6 +4,10 @@ import requests
 import boto3
 from discord.ext import commands
 
+# Monkey patch for pycord dev branch MP3Sink bug
+if not hasattr(discord.sinks.MP3Sink, '__sink_listeners__'):
+    discord.sinks.MP3Sink.__sink_listeners__ = []
+
 # CONFIGURAÇÕES
 TOKEN = os.getenv("DISCORD_TOKEN")
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
