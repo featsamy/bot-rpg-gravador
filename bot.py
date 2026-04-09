@@ -2,6 +2,7 @@ import discord
 import os
 import requests
 import boto3
+import asyncio
 from discord.ext import commands
 
 # CONFIGURAÇÕES
@@ -44,6 +45,8 @@ async def gravar(ctx):
         vc = ctx.voice_client
     else:
         vc = await voice.channel.connect()
+    
+    await asyncio.sleep(1.5)  # Anti-crash protection to wait for voice handshake
 
     guild_id = ctx.guild.id
     if not recording_sessions.get(guild_id, False):
