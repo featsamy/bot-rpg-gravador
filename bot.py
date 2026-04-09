@@ -38,22 +38,36 @@ async def gravar(ctx):
     if not voice:
         return await ctx.send("❌ Entre em um canal de voz primeiro!")
 
-    # Desconecta cliente fantasma se existir (causa do bug)
+    # Se já houver um cliente de voz, tentamos limpar tudo antes para evitar o erro de "Not connected"
     if ctx.voice_client:
-        await ctx.voice_client.disconnect(force=True)
+        try:
+            # Tenta desconectar e parar gravações órfãs
+            if ctx.voice_client.recording:
+                ctx.voice_client.stop_recording()
+            await ctx.voice_client.disconnect(force=True)
+        except:
+            pass 
 
-    # Sempre entra no canal do zero
+    # Pausa de 1 segundo para o Discord entender que o bot saiu antes de tentar entrar de novo
+    import asyncio
+    await asyncio.sleep(1)
+
     try:
-        vc = await voice.channel.connect()
+        # Tenta conectar com um timeout definido
+        vc = await voice.channel.connect(timeout=20.0, reconnect=True)
     except Exception as e:
-        return await ctx.send(f"❌ Não consegui entrar no canal: {e}")
+        return await ctx.send(f"❌ Erro ao conectar no canal: {e}")
 
-    vc.start_recording(
-        discord.sinks.MP3Sink(),
-        finished_callback,
-        ctx.channel,
-    )
-    await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
+    # Inicia a gravação
+    try:
+        vc.start_recording(
+            discord.sinks.MP3Sink(),
+            finished_callback,
+            ctx.channel,
+        )
+        await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
+    except Exception as e:
+        await ctx.send(f"❌ Erro ao iniciar gravação: {e}")
 
 @bot.command()
 async def parar(ctx):
