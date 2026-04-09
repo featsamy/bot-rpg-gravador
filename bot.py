@@ -32,6 +32,8 @@ s3_client = boto3.client(
 async def on_ready():
     print(f"✅ Bot SaaS Online: {bot.user}")
 
+recording_sessions = {}
+
 @bot.command()
 async def gravar(ctx):
     voice = ctx.author.voice
@@ -43,13 +45,15 @@ async def gravar(ctx):
     else:
         vc = await voice.channel.connect()
 
-    if not vc.recording:
+    guild_id = ctx.guild.id
+    if not recording_sessions.get(guild_id, False):
         # Grava em MP3
         vc.start_recording(
             discord.sinks.MP3Sink(),
             finished_callback,
             ctx.channel,
         )
+        recording_sessions[guild_id] = True
         await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
     else:
         await ctx.send("Já estou gravando!")
@@ -57,8 +61,10 @@ async def gravar(ctx):
 @bot.command()
 async def parar(ctx):
     vc = ctx.voice_client
-    if vc and vc.recording:
+    guild_id = ctx.guild.id
+    if vc and recording_sessions.get(guild_id, False):
         vc.stop_recording()
+        recording_sessions[guild_id] = False
         await ctx.send("🛑 Gravando finalizada! Subindo arquivos para a nuvem...")
     else:
         await ctx.send("Não estou gravando nada.")
