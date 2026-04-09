@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 # Instala FFmpeg, dependências de compilação E O GIT
 RUN apt-get update && \
-    apt-get install -y ffmpeg libffi-dev libnacl-dev python3-dev build-essential git && \
+    apt-get install -y ffmpeg libsodium-dev libffi-dev python3-dev build-essential git && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
