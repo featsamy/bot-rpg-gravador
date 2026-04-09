@@ -38,21 +38,22 @@ async def gravar(ctx):
     if not voice:
         return await ctx.send("❌ Entre em um canal de voz primeiro!")
 
+    # Desconecta cliente fantasma se existir (causa do bug)
     if ctx.voice_client:
-        vc = ctx.voice_client
-    else:
-        vc = await voice.channel.connect()
+        await ctx.voice_client.disconnect(force=True)
 
-    if not vc.recording:
-        # Grava em MP3
-        vc.start_recording(
-            discord.sinks.MP3Sink(),
-            finished_callback,
-            ctx.channel,
-        )
-        await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
-    else:
-        await ctx.send("Já estou gravando!")
+    # Sempre entra no canal do zero
+    try:
+        vc = await voice.channel.connect()
+    except Exception as e:
+        return await ctx.send(f"❌ Não consegui entrar no canal: {e}")
+
+    vc.start_recording(
+        discord.sinks.MP3Sink(),
+        finished_callback,
+        ctx.channel,
+    )
+    await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
 
 @bot.command()
 async def parar(ctx):
@@ -69,27 +70,26 @@ async def sair(ctx):
         await ctx.voice_client.disconnect()
 
 async def finished_callback(sink, channel: discord.TextChannel, *args):
-    # Aqui a mágica acontece
     await channel.send("☁️ Uploading para o servidor seguro...")
 
     for user_id, audio in sink.audio_data.items():
         file_name = f"sessao_{channel.guild.id}_{user_id}.mp3"
-        
+
         try:
             # 1. Faz Upload para o Cloudflare R2
             audio.file.seek(0)
             s3_client.upload_fileobj(audio.file, R2_BUCKET_NAME, file_name)
-            
+
             # 2. Gera o Link Público
             file_url = f"{R2_PUBLIC_URL}/{file_name}"
-            
+
             # 3. Envia SÓ O LINK para o n8n (JSON leve)
             payload = {
                 'user_id': str(user_id),
                 'audio_url': file_url,
                 'server_name': str(channel.guild.name)
             }
-            
+
             requests.post(N8N_WEBHOOK_URL, json=payload)
             print(f"Link enviado para n8n: {file_url}")
 
