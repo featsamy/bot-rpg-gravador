@@ -50,9 +50,9 @@ async def gravar(ctx):
 
     guild_id = ctx.guild.id
     if not recording_sessions.get(guild_id, False):
-        # Grava em MP3
+        # Grava em formato nativo Wave
         vc.start_recording(
-            discord.sinks.MP3Sink(),
+            discord.sinks.WaveSink(),
             finished_callback,
             ctx.channel,
         )
@@ -82,7 +82,7 @@ async def finished_callback(sink, channel: discord.TextChannel, *args):
     await channel.send("☁️ Uploading para o servidor seguro...")
 
     for user_id, audio in sink.audio_data.items():
-        file_name = f"sessao_{channel.guild.id}_{user_id}.mp3"
+        file_name = f"sessao_{channel.guild.id}_{user_id}.wav"
         
         try:
             # 1. Faz Upload para o Cloudflare R2
