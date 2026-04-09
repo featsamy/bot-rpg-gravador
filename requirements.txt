@@ -1,6 +1,4 @@
-git+https://github.com/Pycord-Development/pycord
+py-cord[voice]==2.6.1
 requests
 python-dotenv
-pynacl
-davey
 boto3
