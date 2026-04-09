@@ -12,6 +12,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import prism from 'prism-media';
 import { Readable } from 'stream';
+import { spawn } from 'child_process';
 
 class Silence extends Readable {
     _read() {
@@ -88,26 +89,21 @@ client.on('messageCreate', async (message) => {
 
                 if (!session.streams.has(userId)) {
                     const opusStream = connection.receiver.subscribe(userId, {
-                        end: {
-                            behavior: EndBehaviorType.Manual,
-                        },
+                        end: { behavior: EndBehaviorType.Manual },
                     });
 
-                    const oggStream = new prism.opus.OggLogicalBitstream({
-                        opusHead: new prism.opus.OpusHead({
-                            channelCount: 2,
-                            sampleRate: 48000,
-                        }),
-                        pageSizeControl: {
-                            maxPackets: 10,
-                        },
-                    });
-
+                    const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
                     const filename = `sessao_${guildId}_${userId}.ogg`;
-                    const outStream = fs.createWriteStream(filename);
 
-                    opusStream.pipe(oggStream).pipe(outStream);
-                    session.streams.set(userId, outStream);
+                    const ffmpegProcess = spawn('ffmpeg', [
+                        '-f', 's16le', '-ar', '48000', '-ac', '2',
+                        '-i', 'pipe:0',
+                        '-acodec', 'libopus',
+                        '-y', filename
+                    ]);
+
+                    opusStream.pipe(decoder).pipe(ffmpegProcess.stdin);
+                    session.streams.set(userId, { opus: opusStream, ffmpeg: ffmpegProcess });
                 }
             });
 
@@ -131,8 +127,9 @@ client.on('messageCreate', async (message) => {
         const connection = session.connection;
         
         // Finaliza streams primeiro
-        for (const [userId, stream] of session.streams.entries()) {
-            stream.end();
+        for (const [userId, record] of session.streams.entries()) {
+            record.opus.unpipe();
+            record.ffmpeg.stdin.end();
         }
 
         connection.destroy();
@@ -193,9 +190,14 @@ client.on('messageCreate', async (message) => {
             session.connection.destroy();
             recordingSessions.delete(guildId);
         } else {
-            const ghostConnection = message.guild.members.me.voice;
-            if (ghostConnection) {
-                ghostConnection.disconnect();
+            const vc = message.member.voice.channel;
+            if (vc) {
+                const conn = joinVoiceChannel({
+                    channelId: vc.id,
+                    guildId: guildId,
+                    adapterCreator: vc.guild.voiceAdapterCreator,
+                });
+                setTimeout(() => conn.destroy(), 100);
             }
         }
     }
