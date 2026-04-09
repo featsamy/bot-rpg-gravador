@@ -5,6 +5,12 @@ import boto3
 import asyncio
 from discord.ext import commands
 
+# Monkey patch for pycord bleeding edge Sink inheritance bugs
+if not hasattr(discord.sinks.WaveSink, '__sink_listeners__'):
+    discord.sinks.WaveSink.__sink_listeners__ = []
+if not hasattr(discord.sinks.WaveSink, 'walk_children'):
+    discord.sinks.WaveSink.walk_children = lambda self: []
+
 # CONFIGURAÇÕES
 TOKEN = os.getenv("DISCORD_TOKEN")
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
