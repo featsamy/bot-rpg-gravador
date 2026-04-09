@@ -1,13 +1,24 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 import { 
     joinVoiceChannel, 
-    EndBehaviorType
+    EndBehaviorType,
+    createAudioPlayer,
+    createAudioResource,
+    StreamType
 } from '@discordjs/voice';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import axios from 'axios';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import prism from 'prism-media';
+import { Readable } from 'stream';
+
+class Silence extends Readable {
+    _read() {
+        this.push(Buffer.alloc(1920, 0));
+        this.destroy();
+    }
+}
 
 dotenv.config();
 
@@ -56,6 +67,11 @@ client.on('messageCreate', async (message) => {
                 adapterCreator: voiceChannel.guild.voiceAdapterCreator,
                 selfDeaf: false,
             });
+
+            // Play silence to establish RTP connection to receive audio
+            const player = createAudioPlayer();
+            connection.subscribe(player);
+            player.play(createAudioResource(new Silence(), { inputType: StreamType.Raw }));
 
             recordingSessions.set(guildId, {
                 connection,
