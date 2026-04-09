@@ -1,17 +1,20 @@
-FROM python:3.11-slim
+FROM node:20-slim
 
-# Instala FFmpeg, dependências de compilação E O GIT
-RUN apt-get update && \
-    apt-get install -y ffmpeg libsodium-dev libffi-dev python3-dev build-essential git && \
-    rm -rf /var/lib/apt/lists/*
+# Instala ferramentas necessárias para dependências de áudio do Discord.js
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
+# Configura diretório de trabalho
 WORKDIR /app
 
-# Instala as bibliotecas do Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copia e instala dependências Node.js
+COPY package.json ./
+RUN npm install
 
-COPY . .
-
-# Inicia o bot
-CMD ["python", "bot.py"]
+# Copia e roda a aplicação
+COPY index.js ./
+CMD ["npm", "start"]
