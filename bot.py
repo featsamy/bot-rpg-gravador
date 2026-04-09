@@ -1,3 +1,4 @@
+import aiohttp
 import discord
 import os
 import requests
@@ -101,15 +102,20 @@ async def finished_callback(sink, channel: discord.TextChannel, *args):
             # 2. Gera o Link Público
             file_url = f"{R2_PUBLIC_URL}/{file_name}"
 
-            # 3. Envia SÓ O LINK para o n8n (JSON leve)
+            # 3. Envia para o n8n de forma ASSÍNCRONA (não trava o bot)
             payload = {
                 'user_id': str(user_id),
                 'audio_url': file_url,
                 'server_name': str(channel.guild.name)
             }
 
-            requests.post(N8N_WEBHOOK_URL, json=payload)
-            print(f"Link enviado para n8n: {file_url}")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(N8N_WEBHOOK_URL, json=payload) as response:
+                    print(f"Link enviado para n8n: {file_url} - Status: {response.status}")
+
+        except Exception as e:
+            print(f"Erro no upload ou n8n: {e}")
+            await channel.send(f"⚠️ Erro ao processar áudio de <@{user_id}>.")
 
         except Exception as e:
             print(f"Erro no upload: {e}")
