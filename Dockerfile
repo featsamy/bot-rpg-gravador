@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-slim
 
 # Instala ferramentas necessárias para dependências de áudio do Discord.js
 RUN apt-get update && apt-get install -y \
