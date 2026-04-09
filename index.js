@@ -29,6 +29,20 @@ class Silence extends Readable {
     }
 }
 
+// Monkey patch prism-media Opus Decoder para não destruir a gravação inteira
+// se o Discord enviar 1 pacote "corrompido" (muito comum no início do protocolo DAVE):
+if (prism.opus && prism.opus.Decoder) {
+    prism.opus.Decoder.prototype._transform = function(chunk, encoding, done) {
+        try {
+            this.push(this._decode(chunk));
+            return done();
+        } catch (e) {
+            // Ignora pacote corrompido em vez de explodir a stream
+            return done();
+        }
+    };
+}
+
 dotenv.config();
 
 const client = new Client({ 
