@@ -38,45 +38,49 @@ async def gravar(ctx):
     if not voice:
         return await ctx.send("❌ Entre em um canal de voz primeiro!")
 
-    # Se já houver um cliente de voz, tentamos limpar tudo antes para evitar o erro de "Not connected"
+    # Limpa conexões zumbis
     if ctx.voice_client:
         try:
-            # Tenta desconectar e parar gravações órfãs
-            if ctx.voice_client.recording:
-                ctx.voice_client.stop_recording()
             await ctx.voice_client.disconnect(force=True)
+            import asyncio
+            await asyncio.sleep(1)
         except:
-            pass 
-
-    # Pausa de 1 segundo para o Discord entender que o bot saiu antes de tentar entrar de novo
-    import asyncio
-    await asyncio.sleep(1)
+            pass
 
     try:
-        # Tenta conectar com um timeout definido
+        # Conecta e aguarda estabilizar
         vc = await voice.channel.connect(timeout=20.0, reconnect=True)
-    except Exception as e:
-        return await ctx.send(f"❌ Erro ao conectar no canal: {e}")
+        
+        # O pulo do gato: pequeno delay para garantir que o estado 'connected' suba
+        import asyncio
+        await asyncio.sleep(1) 
 
-    # Inicia a gravação
-    try:
-        vc.start_recording(
-            discord.sinks.MP3Sink(),
-            finished_callback,
-            ctx.channel,
-        )
-        await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
+        if not vc.recording:
+            vc.start_recording(
+                discord.sinks.MP3Sink(),
+                finished_callback,
+                ctx.channel,
+            )
+            await ctx.send(f"🔴 **Gravando Sessão!** em `{voice.channel.name}`.")
     except Exception as e:
-        await ctx.send(f"❌ Erro ao iniciar gravação: {e}")
+        await ctx.send(f"❌ Erro ao iniciar: {e}")
 
 @bot.command()
 async def parar(ctx):
     vc = ctx.voice_client
+    # Verifica se ele existe e se o estado de gravação está ativo
     if vc and vc.recording:
-        vc.stop_recording()
-        await ctx.send("🛑 Gravando finalizada! Subindo arquivos para a nuvem...")
+        try:
+            vc.stop_recording()
+            await ctx.send("🛑 Gravando finalizada! Subindo arquivos...")
+        except Exception as e:
+            await ctx.send(f"⚠️ Erro ao parar: {e}")
+            await vc.disconnect(force=True)
     else:
         await ctx.send("Não estou gravando nada.")
+        # Se ele está na call mas não gravando, force a saída para limpar o estado
+        if vc:
+            await vc.disconnect(force=True)
 
 @bot.command()
 async def sair(ctx):
