@@ -1,5 +1,6 @@
 git+https://github.com/Pycord-Development/pycord
 requests
 python-dotenv
+pynacl
 davey
 boto3
