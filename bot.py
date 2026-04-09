@@ -1,4 +1,3 @@
-import aiohttp
 import discord
 import os
 import requests
@@ -39,49 +38,30 @@ async def gravar(ctx):
     if not voice:
         return await ctx.send("❌ Entre em um canal de voz primeiro!")
 
-    # Limpa conexões zumbis
     if ctx.voice_client:
-        try:
-            await ctx.voice_client.disconnect(force=True)
-            import asyncio
-            await asyncio.sleep(1)
-        except:
-            pass
+        vc = ctx.voice_client
+    else:
+        vc = await voice.channel.connect()
 
-    try:
-        # Conecta e aguarda estabilizar
-        vc = await voice.channel.connect(timeout=20.0, reconnect=True)
-        
-        # O pulo do gato: pequeno delay para garantir que o estado 'connected' suba
-        import asyncio
-        await asyncio.sleep(1) 
-
-        if not vc.recording:
-            vc.start_recording(
-                discord.sinks.MP3Sink(),
-                finished_callback,
-                ctx.channel,
-            )
-            await ctx.send(f"🔴 **Gravando Sessão!** em `{voice.channel.name}`.")
-    except Exception as e:
-        await ctx.send(f"❌ Erro ao iniciar: {e}")
+    if not vc.recording:
+        # Grava em MP3
+        vc.start_recording(
+            discord.sinks.MP3Sink(),
+            finished_callback,
+            ctx.channel,
+        )
+        await ctx.send(f"🔴 **Gravando Sessão!** (Modo Cloud) em `{voice.channel.name}`.")
+    else:
+        await ctx.send("Já estou gravando!")
 
 @bot.command()
 async def parar(ctx):
     vc = ctx.voice_client
-    # Verifica se ele existe e se o estado de gravação está ativo
     if vc and vc.recording:
-        try:
-            vc.stop_recording()
-            await ctx.send("🛑 Gravando finalizada! Subindo arquivos...")
-        except Exception as e:
-            await ctx.send(f"⚠️ Erro ao parar: {e}")
-            await vc.disconnect(force=True)
+        vc.stop_recording()
+        await ctx.send("🛑 Gravando finalizada! Subindo arquivos para a nuvem...")
     else:
         await ctx.send("Não estou gravando nada.")
-        # Se ele está na call mas não gravando, force a saída para limpar o estado
-        if vc:
-            await vc.disconnect(force=True)
 
 @bot.command()
 async def sair(ctx):
@@ -89,33 +69,29 @@ async def sair(ctx):
         await ctx.voice_client.disconnect()
 
 async def finished_callback(sink, channel: discord.TextChannel, *args):
+    # Aqui a mágica acontece
     await channel.send("☁️ Uploading para o servidor seguro...")
 
     for user_id, audio in sink.audio_data.items():
         file_name = f"sessao_{channel.guild.id}_{user_id}.mp3"
-
+        
         try:
             # 1. Faz Upload para o Cloudflare R2
             audio.file.seek(0)
             s3_client.upload_fileobj(audio.file, R2_BUCKET_NAME, file_name)
-
+            
             # 2. Gera o Link Público
             file_url = f"{R2_PUBLIC_URL}/{file_name}"
-
-            # 3. Envia para o n8n de forma ASSÍNCRONA (não trava o bot)
+            
+            # 3. Envia SÓ O LINK para o n8n (JSON leve)
             payload = {
                 'user_id': str(user_id),
                 'audio_url': file_url,
                 'server_name': str(channel.guild.name)
             }
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(N8N_WEBHOOK_URL, json=payload) as response:
-                    print(f"Link enviado para n8n: {file_url} - Status: {response.status}")
-
-        except Exception as e:
-            print(f"Erro no upload ou n8n: {e}")
-            await channel.send(f"⚠️ Erro ao processar áudio de <@{user_id}>.")
+            
+            requests.post(N8N_WEBHOOK_URL, json=payload)
+            print(f"Link enviado para n8n: {file_url}")
 
         except Exception as e:
             print(f"Erro no upload: {e}")
