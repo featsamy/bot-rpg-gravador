@@ -15,9 +15,17 @@ import { Readable } from 'stream';
 import { spawn } from 'child_process';
 
 class Silence extends Readable {
+    constructor() {
+        super();
+        this.sent = false;
+    }
     _read() {
-        this.push(Buffer.alloc(1920, 0));
-        this.destroy();
+        if (!this.sent) {
+            this.push(Buffer.alloc(1920, 0));
+            this.sent = true;
+        } else {
+            this.push(null);
+        }
     }
 }
 
@@ -71,6 +79,7 @@ client.on('messageCreate', async (message) => {
 
             // Play silence to establish RTP connection to receive audio
             const player = createAudioPlayer();
+            player.on('error', error => console.error('Error on AudioPlayer:', error.message));
             connection.subscribe(player);
             player.play(createAudioResource(new Silence(), { inputType: StreamType.Raw }));
 
@@ -99,8 +108,12 @@ client.on('messageCreate', async (message) => {
                         '-f', 's16le', '-ar', '48000', '-ac', '2',
                         '-i', 'pipe:0',
                         '-acodec', 'libopus',
+                        '-f', 'opus', 
                         '-y', filename
                     ]);
+                    
+                    ffmpegProcess.on('error', err => console.error('FFmpeg Error:', err));
+                    opusStream.on('error', err => console.error('OpusStream Error:', err));
 
                     opusStream.pipe(decoder).pipe(ffmpegProcess.stdin);
                     session.streams.set(userId, { opus: opusStream, ffmpeg: ffmpegProcess });
